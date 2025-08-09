@@ -1,9 +1,10 @@
-#![feature(test, portable_simd)]
+#![forbid(unsafe_code)]
+#![feature(portable_simd)]
+#![cfg_attr(test, feature(test))]
+#[cfg(test)]
 extern crate test;
 
-use core::{
-    simd::{Simd, num::SimdUint},
-};
+use core::simd::{Simd, num::SimdUint};
 
 const LANES: usize = 32;
 const MOD: u32 = 65521;
@@ -79,7 +80,6 @@ mod tests {
 
     #[bench]
     fn bench_add(b: &mut test::Bencher) {
-        // generate random data for testing
         let data: Vec<u8> = (0..100000).map(|_| rand::random::<u8>()).collect();
         b.bytes = data.len() as u64;
         b.iter(|| adler32(&data));
