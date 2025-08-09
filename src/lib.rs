@@ -3,7 +3,6 @@ extern crate test;
 
 use core::{
     simd::{Simd, num::SimdUint},
-    slice::ChunksExact,
 };
 
 const LANES: usize = 32;
@@ -50,14 +49,14 @@ fn update_simd(a_out: &mut u32, b_out: &mut u32, values: &[u8]) {
     let mut a: Simd<u16, LANES> = Simd::splat(0);
     let mut b: Simd<u16, LANES> = Simd::splat(0);
 
-    let len = values.len() / LANES;
+    let len = values.len();
 
     for v in values.chunks_exact(LANES) {
         a += Simd::from_slice(v).cast();
         b += a;
     }
 
-    *b_out += LANES as u32 * (*a_out * len as u32 + b.cast::<u32>().reduce_sum())
+    *b_out += *a_out * len as u32 + LANES as u32 * b.cast::<u32>().reduce_sum()
         - (a.cast() * WEIGHTS).reduce_sum();
     *a_out += a.cast::<u32>().reduce_sum();
 }
