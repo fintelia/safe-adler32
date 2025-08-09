@@ -8,23 +8,20 @@ use core::{
 
 const LANES: usize = 32;
 const MOD: u32 = 65521;
-const NMAX: usize = 5552 & !(LANES - 1);
 
 pub fn adler32(data: &[u8]) -> u32 {
     let mut a = 1u32;
     let mut b = 0u32;
 
-    let chunks = data.chunks_exact(16 * LANES);
-    let remainder = chunks.remainder();
+    let (chunks, remainder) = data.as_chunks::<{ 16 * LANES }>();
 
     for chunk in chunks {
-        update_simd(&mut a, &mut b, chunk.chunks_exact(LANES));
+        update_simd(&mut a, &mut b, chunk);
         a %= MOD;
         b %= MOD;
     }
 
-    let vs = remainder.chunks_exact(LANES);
-    let vremainder = vs.remainder();
+    let (vs, vremainder) = remainder.split_at(remainder.len() & !(LANES - 1));
     update_simd(&mut a, &mut b, vs);
 
     for byte in vremainder {
@@ -42,7 +39,6 @@ const WEIGHTS: Simd<u32, LANES> = {
     let mut weights = [0; LANES];
     let mut i = 0;
     while i < LANES {
-        // weights[LANES - 1 - i] = i as u32 + 1;
         weights[i] = i as u32;
         i += 1;
     }
@@ -50,13 +46,13 @@ const WEIGHTS: Simd<u32, LANES> = {
     Simd::from_array(weights)
 };
 
-fn update_simd(a_out: &mut u32, b_out: &mut u32, values: ChunksExact<u8>) {
+fn update_simd(a_out: &mut u32, b_out: &mut u32, values: &[u8]) {
     let mut a: Simd<u16, LANES> = Simd::splat(0);
     let mut b: Simd<u16, LANES> = Simd::splat(0);
 
-    let len = values.len();
+    let len = values.len() / LANES;
 
-    for v in values {
+    for v in values.chunks_exact(LANES) {
         a += Simd::from_slice(v).cast();
         b += a;
     }
@@ -72,8 +68,6 @@ mod tests {
 
     #[test]
     fn test_adler32() {
-        // panic!("weights = {:?}", WEIGHTS);
-
         let data: Vec<u8> = (0..100000).map(|_| rand::random::<u8>()).collect();
         let checksum = adler32(&data);
         let reference = adler2::adler32(std::io::Cursor::new(&data)).unwrap();
@@ -87,7 +81,7 @@ mod tests {
     #[bench]
     fn bench_add(b: &mut test::Bencher) {
         // generate random data for testing
-        let data: Vec<u8> = (0..10000).map(|_| rand::random::<u8>()).collect();
+        let data: Vec<u8> = (0..100000).map(|_| rand::random::<u8>()).collect();
         b.bytes = data.len() as u64;
         b.iter(|| adler32(&data));
     }
