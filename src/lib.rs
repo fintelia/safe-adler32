@@ -14,7 +14,7 @@ pub fn adler32(data: &[u8]) -> u32 {
     let mut a = 1u32;
     let mut b = 0u32;
 
-    let chunks = data.chunks_exact(NMAX);
+    let chunks = data.chunks_exact(16 * LANES);
     let remainder = chunks.remainder();
 
     for chunk in chunks {
@@ -51,17 +51,18 @@ const WEIGHTS: Simd<u32, LANES> = {
 };
 
 fn update_simd(a_out: &mut u32, b_out: &mut u32, values: ChunksExact<u8>) {
-    let mut a: Simd<u32, LANES> = Simd::splat(0);
-    let mut b: Simd<u32, LANES> = Simd::splat(0);
+    let mut a: Simd<u16, LANES> = Simd::splat(0);
+    let mut b: Simd<u16, LANES> = Simd::splat(0);
 
-    let len = values.len() * LANES;
+    let len = values.len();
 
     for v in values {
-        a += Simd::from_slice(v).cast::<u32>();
+        a += Simd::from_slice(v).cast();
         b += a;
     }
 
-    *b_out += *a_out * len as u32 + LANES as u32 * b.reduce_sum() - (a * WEIGHTS).reduce_sum();
+    *b_out += LANES as u32 * (*a_out * len as u32 + b.cast::<u32>().reduce_sum())
+        - (a.cast() * WEIGHTS).reduce_sum();
     *a_out += a.cast::<u32>().reduce_sum();
 }
 
@@ -76,7 +77,11 @@ mod tests {
         let data: Vec<u8> = (0..100000).map(|_| rand::random::<u8>()).collect();
         let checksum = adler32(&data);
         let reference = adler2::adler32(std::io::Cursor::new(&data)).unwrap();
-        assert_eq!(checksum, reference, "Checksum mismatch {:x} != {:x}", checksum, reference);
+        assert_eq!(
+            checksum, reference,
+            "Checksum mismatch {:x} != {:x}",
+            checksum, reference
+        );
     }
 
     #[bench]
