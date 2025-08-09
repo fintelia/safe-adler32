@@ -1,8 +1,14 @@
-#![feature(test)]
+#![feature(test, portable_simd)]
 extern crate test;
 
+use core::{
+    simd::{Simd, num::SimdUint},
+    slice::ChunksExact,
+};
+
+const LANES: usize = 32;
 const MOD: u32 = 65521;
-const NMAX: usize = 5552;
+const NMAX: usize = 5552 & !(LANES - 1);
 
 pub fn adler32(data: &[u8]) -> u32 {
     let mut a = 1u32;
@@ -12,39 +18,16 @@ pub fn adler32(data: &[u8]) -> u32 {
     let remainder = chunks.remainder();
 
     for chunk in chunks {
-        let (chunk1, chunk2) = chunk.split_at(NMAX / 2);
-
-        let mut a2 = 0u32;
-        let mut b2 = 0u32;
-        for (&v0, &v1) in chunk1.iter().zip(chunk2.iter()) {
-            a = a.wrapping_add(v0 as u32);
-            b = b.wrapping_add(a);
-
-            a2 = a2.wrapping_add(v1 as u32);
-            b2 = b2.wrapping_add(a2);
-        }
-
-        b += a * (NMAX / 2) as u32 + b2;
-        a += a2;
-
-        // while let [v0, v1, v2, v3, remainder @ ..] = chunk {
-        //     b = b.wrapping_add(
-        //         a * 4 + *v0 as u32 * 4 + *v1 as u32 * 3 + *v2 as u32 * 2 + *v3 as u32,
-        //     );
-        //     a = a.wrapping_add(*v0 as u32 + *v1 as u32 + *v2 as u32 + *v3 as u32);
-        //     chunk = remainder;
-        // }
-
-        // for byte in chunk {
-        //     b = b.wrapping_add(a + *byte as u32);
-        //     a = a.wrapping_add(*byte as _);
-        // }
-
+        update_simd(&mut a, &mut b, chunk.chunks_exact(LANES));
         a %= MOD;
         b %= MOD;
     }
 
-    for byte in remainder {
+    let vs = remainder.chunks_exact(LANES);
+    let vremainder = vs.remainder();
+    update_simd(&mut a, &mut b, vs);
+
+    for byte in vremainder {
         a = a.wrapping_add(*byte as _);
         b = b.wrapping_add(a);
     }
@@ -55,22 +38,51 @@ pub fn adler32(data: &[u8]) -> u32 {
     (b << 16) | a
 }
 
+const WEIGHTS: Simd<u32, LANES> = {
+    let mut weights = [0; LANES];
+    let mut i = 0;
+    while i < LANES {
+        // weights[LANES - 1 - i] = i as u32 + 1;
+        weights[i] = i as u32;
+        i += 1;
+    }
+
+    Simd::from_array(weights)
+};
+
+fn update_simd(a_out: &mut u32, b_out: &mut u32, values: ChunksExact<u8>) {
+    let mut a: Simd<u32, LANES> = Simd::splat(0);
+    let mut b: Simd<u32, LANES> = Simd::splat(0);
+
+    let len = values.len() * LANES;
+
+    for v in values {
+        a += Simd::from_slice(v).cast::<u32>();
+        b += a;
+    }
+
+    *b_out += *a_out * len as u32 + LANES as u32 * b.reduce_sum() - (a * WEIGHTS).reduce_sum();
+    *a_out += a.cast::<u32>().reduce_sum();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_adler32() {
-        let data: Vec<u8> = (0..10000).map(|_| rand::random::<u8>()).collect();
+        // panic!("weights = {:?}", WEIGHTS);
+
+        let data: Vec<u8> = (0..100000).map(|_| rand::random::<u8>()).collect();
         let checksum = adler32(&data);
         let reference = adler2::adler32(std::io::Cursor::new(&data)).unwrap();
-        assert_eq!(checksum, reference, "Checksum mismatch");
+        assert_eq!(checksum, reference, "Checksum mismatch {:x} != {:x}", checksum, reference);
     }
 
     #[bench]
     fn bench_add(b: &mut test::Bencher) {
         // generate random data for testing
-        let data: Vec<u8> = (0..NMAX*10).map(|_| rand::random::<u8>()).collect();
+        let data: Vec<u8> = (0..10000).map(|_| rand::random::<u8>()).collect();
         b.bytes = data.len() as u64;
         b.iter(|| adler32(&data));
     }
