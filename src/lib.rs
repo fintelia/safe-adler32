@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+#![no_std]
 #![feature(portable_simd)]
 #![cfg_attr(test, feature(test))]
 #[cfg(test)]
@@ -64,6 +65,9 @@ fn update_simd(a_out: &mut u32, b_out: &mut u32, values: &[u8]) {
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
+    use std::vec::Vec;
+
     use super::*;
 
     #[test]
