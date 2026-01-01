@@ -9,3 +9,4 @@ license = "MIT OR Apache-2.0"
 [dev-dependencies]
 adler2 = "2.0.1"
 rand = "0.9.2"
+simd-adler32 = "0.3.8"

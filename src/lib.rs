@@ -79,9 +79,44 @@ mod tests {
     }
 
     #[bench]
-    fn bench_add(b: &mut test::Bencher) {
+    fn bench_10b(b: &mut test::Bencher) {
+        let data: Vec<u8> = (0..10).map(|_| rand::random::<u8>()).collect();
+        b.bytes = data.len() as u64;
+        b.iter(|| adler32(&data));
+    }
+
+    #[bench]
+    fn bench_10b_simd_adler32(b: &mut test::Bencher) {
+        let data: Vec<u8> = (0..10).map(|_| rand::random::<u8>()).collect();
+        b.bytes = data.len() as u64;
+        b.iter(|| simd_adler32::adler32(&&*data));
+    }
+
+    #[bench]
+    fn bench_10b_adler2(b: &mut test::Bencher) {
+        let data: Vec<u8> = (0..10).map(|_| rand::random::<u8>()).collect();
+        b.bytes = data.len() as u64;
+        b.iter(|| adler2::adler32(std::io::Cursor::new(&data)));
+    }
+
+    #[bench]
+    fn bench_100k(b: &mut test::Bencher) {
         let data: Vec<u8> = (0..100000).map(|_| rand::random::<u8>()).collect();
         b.bytes = data.len() as u64;
         b.iter(|| adler32(&data));
+    }
+
+    #[bench]
+    fn bench_100k_simd_adler32(b: &mut test::Bencher) {
+        let data: Vec<u8> = (0..100000).map(|_| rand::random::<u8>()).collect();
+        b.bytes = data.len() as u64;
+        b.iter(|| simd_adler32::adler32(&&*data));
+    }
+
+    #[bench]
+    fn bench_100k_adler2(b: &mut test::Bencher) {
+        let data: Vec<u8> = (0..100000).map(|_| rand::random::<u8>()).collect();
+        b.bytes = data.len() as u64;
+        b.iter(|| adler2::adler32(std::io::Cursor::new(&data)));
     }
 }
