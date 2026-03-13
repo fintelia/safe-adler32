@@ -14,18 +14,17 @@ pub fn adler32(data: &[u8]) -> u32 {
     let mut a = 1u32;
     let mut b = 0u32;
 
-    let (chunks, remainder) = data.as_chunks::<{ 16 * LANES }>();
-
+    let (chunks, data) = data.as_chunks::<{ 5552 * LANES }>();
     for chunk in chunks {
         update_simd(&mut a, &mut b, chunk);
         a %= MOD;
         b %= MOD;
     }
 
-    let (vs, vremainder) = remainder.split_at(remainder.len() & !(LANES - 1));
+    let (vs, data) = data.split_at(data.len() & !(LANES - 1));
     update_simd(&mut a, &mut b, vs);
 
-    for byte in vremainder {
+    for byte in data {
         a = a.wrapping_add(*byte as _);
         b = b.wrapping_add(a);
     }
@@ -47,20 +46,38 @@ const WEIGHTS: Simd<u32, LANES> = {
     Simd::from_array(weights)
 };
 
-fn update_simd(a_out: &mut u32, b_out: &mut u32, values: &[u8]) {
+fn update_simd(a_out: &mut u32, b_out: &mut u32, data: &[u8]) {
+    let mut a: Simd<u32, LANES> = Simd::splat(0);
+    let mut b: Simd<u32, LANES> = Simd::splat(0);
+
+    let len = data.len();
+
+    let (chunks, data) = data.as_chunks::<{ 16 * LANES }>();
+    for chunk in chunks {
+        let (a_part, b_part) = update_simd_inner(chunk);
+        b += a * Simd::splat(chunk.len() as u32) + b_part.cast();
+        a += a_part.cast();
+    }
+
+    let (a_part, b_part) = update_simd_inner(data);
+    b += a * Simd::splat(data.len() as u32) + b_part.cast();
+    a += a_part.cast();
+
+    *b_out += *a_out * len as u32 + LANES as u32 * b.cast::<u32>().reduce_sum()
+        - (a.cast() * WEIGHTS).reduce_sum();
+    *a_out += a.cast::<u32>().reduce_sum();
+}
+
+fn update_simd_inner(values: &[u8]) -> (Simd<u16, LANES>, Simd<u16, LANES>) {
     let mut a: Simd<u16, LANES> = Simd::splat(0);
     let mut b: Simd<u16, LANES> = Simd::splat(0);
-
-    let len = values.len();
 
     for v in values.chunks_exact(LANES) {
         a += Simd::from_slice(v).cast();
         b += a;
     }
 
-    *b_out += *a_out * len as u32 + LANES as u32 * b.cast::<u32>().reduce_sum()
-        - (a.cast() * WEIGHTS).reduce_sum();
-    *a_out += a.cast::<u32>().reduce_sum();
+    (a, b)
 }
 
 #[cfg(test)]
