@@ -5,6 +5,6 @@ any unsafe code. It is designed to be safe, portable, and efficient.
 
 ## Performance
 
-With default target features, performance is about 30,000 MB/s on a Ryzen 5
-5600X. When compiling with `-C target-cpu=x86-64-v3`, performance increases to
-about 43,000 MB/s.
+With default target features, performance is about 44 GB/s on a Ryzen 9
+9900X. When compiling with `-C target-cpu=x86-64-v4`, performance increases to
+about 131 GB/s.
