@@ -14,7 +14,7 @@ pub fn adler32(data: &[u8]) -> u32 {
     let mut a = 1u32;
     let mut b = 0u32;
 
-    let (chunks, data) = data.as_chunks::<{ 5552 * LANES }>();
+    let (chunks, data) = data.as_chunks::<{ 347 * LANES }>();
     for chunk in chunks {
         update_simd(&mut a, &mut b, chunk);
         a %= MOD;
@@ -55,16 +55,17 @@ fn update_simd(a_out: &mut u32, b_out: &mut u32, data: &[u8]) {
     let (chunks, data) = data.as_chunks::<{ 16 * LANES }>();
     for chunk in chunks {
         let (a_part, b_part) = update_simd_inner(chunk);
-        b += a * Simd::splat(chunk.len() as u32) + b_part.cast();
+        b += a * Simd::splat(16) + b_part.cast();
         a += a_part.cast();
     }
 
     let (a_part, b_part) = update_simd_inner(data);
-    b += a * Simd::splat(data.len() as u32) + b_part.cast();
+    b += a * Simd::splat((data.len() / LANES) as u32) + b_part.cast();
     a += a_part.cast();
 
-    *b_out += *a_out * len as u32 + LANES as u32 * b.cast::<u32>().reduce_sum()
-        - (a.cast() * WEIGHTS).reduce_sum();
+    *b_out += ((*a_out as u64 * len as u64 + LANES as u64 * b.cast::<u32>().reduce_sum() as u64
+        - (a.cast() * WEIGHTS).reduce_sum() as u64)
+        % MOD as u64) as u32;
     *a_out += a.cast::<u32>().reduce_sum();
 }
 
