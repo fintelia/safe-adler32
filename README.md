@@ -1,3 +1,6 @@
+**This project has migrated to Codeberg: https://codeberg.org/fintelia/safe-adler32**
+
+---
 # safe-adler32
 
 This crate implements Adler-32 checksums using Rust's `std::simd` and without
